@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package wso2.discovery.config.apkmgt;
+
+option go_package = "github.com/wso2/apkmgt/discovery/config/apkmgt;apkmgt";
+option java_package = "org.wso2.choreo.connect.discovery.config.apkmgt";
+option java_outer_classname = "ConfigProto";
+option java_multiple_files = true;
+
+// [#protodoc-title: Config]
+
+// apkmgt config model
+message Config {
+    string name = 1;
+}
