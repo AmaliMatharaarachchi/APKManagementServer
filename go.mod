@@ -2,11 +2,13 @@ module APKManagementServer
 
 go 1.18
 
+replace github.com/wso2/product-microgateway/adapter => github.com/AmaliMatharaarachchi/product-microgateway/adapter v0.0.0-20221027040248-0052cbae398e
+
 require (
 	github.com/cncf/udpa/go v0.0.0-20201120205902-5459f2c99403
 	github.com/envoyproxy/go-control-plane v0.10.2-0.20211124143408-6141aee35516
 	github.com/sirupsen/logrus v1.9.0
-	github.com/wso2/product-microgateway/adapter v0.0.0-20221017054005-1289f1b6016f
+	github.com/wso2/product-microgateway/adapter v0.0.0
 	google.golang.org/grpc v1.36.0
 	google.golang.org/protobuf v1.28.1
 )

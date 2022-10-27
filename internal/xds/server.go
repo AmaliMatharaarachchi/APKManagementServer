@@ -19,32 +19,38 @@ package xds
 
 import (
 	"APKManagementServer/internal/logger"
+	"APKManagementServer/internal/xds/callbacks"
 	"context"
 	"fmt"
 	"math/rand"
-	"strings"
+	"net"
 	"sync"
 	"time"
 
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
-	apkmgt_api "github.com/wso2/product-microgateway/adapter/pkg/discovery/api/wso2/discovery/apkmgt"
+	apkmgt_application "github.com/wso2/product-microgateway/adapter/pkg/discovery/api/wso2/discovery/apkmgt"
+	apkmgt_service "github.com/wso2/product-microgateway/adapter/pkg/discovery/api/wso2/discovery/service/apkmgt"
 	wso2_cache "github.com/wso2/product-microgateway/adapter/pkg/discovery/protocol/cache/v3"
 	wso2_resource "github.com/wso2/product-microgateway/adapter/pkg/discovery/protocol/resource/v3"
+	wso2_server "github.com/wso2/product-microgateway/adapter/pkg/discovery/protocol/server/v3"
+	"google.golang.org/grpc"
 )
 
 var (
 	apiCache wso2_cache.SnapshotCache
 	// The labels with partition IDs are stored here. <LabelHirerarchy>-P:<partition_ID>
 	// TODO: (VirajSalaka) change the implementation of the snapshot library to provide the same information.
-	introducedLabels map[string]bool
+	introducedLabels map[string]string
 	apiCacheMutex    sync.Mutex
 	Sent             bool = true
 )
 
 const (
-	maxRandomInt int    = 999999999
-	typeURL      string = "type.googleapis.com/wso2.discovery.ga.Api"
+	maxRandomInt             int    = 999999999
+	typeURL                  string = "type.googleapis.com/wso2.discovery.ga.Api"
+	grpcMaxConcurrentStreams        = 1000000
+	port                            = 18000
 )
 
 // IDHash uses ID field as the node hash.
@@ -63,53 +69,47 @@ var _ wso2_cache.NodeHash = IDHash{}
 func init() {
 	apiCache = wso2_cache.NewSnapshotCache(false, IDHash{}, nil)
 	rand.Seed(time.Now().UnixNano())
-	introducedLabels = make(map[string]bool, 1)
-}
-
-// GetAPICache returns API Cache
-func GetAPICache() wso2_cache.SnapshotCache {
-	return apiCache
+	introducedLabels = make(map[string]string, 1)
 }
 
 //FeedData mock data
 func FeedData() {
 	logger.LoggerXdsServer.Debug("adding mock data")
 	version := rand.Intn(maxRandomInt)
-	api := &apkmgt_api.Api{
-		ApiUUID:      "apiUUID1",
-		RevisionUUID: "revisionUUID1",
+	applications := apkmgt_application.ApplicationDetails{
+		Applications: []*apkmgt_application.Application{
+			{
+				Uuid: "apiUUID1",
+				Name: "name1",
+			},
+		},
 	}
-
 	newSnapshot, _ := wso2_cache.NewSnapshot(fmt.Sprint(version), map[wso2_resource.Type][]types.Resource{
-		wso2_resource.APKMgtType: {api},
+		wso2_resource.APKMgtApplicationType: {&applications},
 	})
 	apiCacheMutex.Lock()
 	apiCache.SetSnapshot(context.Background(), "mine", newSnapshot)
 	apiCacheMutex.Unlock()
-	logger.LoggerXdsServer.Debug("added mock data")
 }
 
-// SetEmptySnapshot sets an empty snapshot into the apiCache for the given label
-// this is used to set empty snapshot when there are no APIs available for a label
-func SetEmptySnapshot(label string) error {
-	version := rand.Intn(maxRandomInt)
-	newSnapshot, err := wso2_cache.NewSnapshot(fmt.Sprint(version), map[wso2_resource.Type][]types.Resource{
-		wso2_resource.APKMgtType: {},
-	})
+func InitAPKMgtServer() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	apiCache := wso2_cache.NewSnapshotCache(false, IDHash{}, nil)
+	apkMgtAPIDsSrv := wso2_server.NewServer(ctx, apiCache, &callbacks.Callbacks{})
+
+	var grpcOptions []grpc.ServerOption
+	grpcOptions = append(grpcOptions, grpc.MaxConcurrentStreams(grpcMaxConcurrentStreams))
+	grpcServer := grpc.NewServer(grpcOptions...)
+	apkmgt_service.RegisterAPKMgtDiscoveryServiceServer(grpcServer, apkMgtAPIDsSrv)
+
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
-		logger.LoggerXdsServer.Error("Error creating empty snapshot. error: ", err.Error())
-		return err
+		logger.LoggerServer.Errorf("Error while listening on port: %s", port, err.Error())
 	}
-	apiCacheMutex.Lock()
-	defer apiCacheMutex.Unlock()
-	//performing null check again to avoid race conditions
-	_, errSnap := apiCache.GetSnapshot(label)
-	if errSnap != nil && strings.Contains(errSnap.Error(), "no snapshot found for node") {
-		errSetSnap := apiCache.SetSnapshot(context.Background(), label, newSnapshot)
-		if errSetSnap != nil {
-			logger.LoggerXdsServer.Error("Error setting empty snapshot to apiCache. error : ", errSetSnap.Error())
-			return errSetSnap
-		}
+
+	logger.LoggerServer.Info("APK Management server XDS is starting.")
+	if err = grpcServer.Serve(listener); err != nil {
+		logger.LoggerServer.Error("Error while starting APK Management server XDS.", err)
 	}
-	return nil
 }
