@@ -18,6 +18,7 @@ require (
 	github.com/cncf/xds/go v0.0.0-20211001041855-01bcc9b48dfe // indirect
 	github.com/envoyproxy/protoc-gen-validate v0.4.1 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/lib/pq v1.10.7
 	github.com/pelletier/go-toml v1.8.1 // indirect
 	github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4 // indirect
 	golang.org/x/net v0.0.0-20220909164309-bea034e7d591 // indirect

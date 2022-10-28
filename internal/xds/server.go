@@ -21,11 +21,14 @@ import (
 	"APKManagementServer/internal/logger"
 	"APKManagementServer/internal/xds/callbacks"
 	"context"
+	"database/sql"
 	"fmt"
 	"math/rand"
 	"net"
 	"sync"
 	"time"
+
+	_ "github.com/lib/pq"
 
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
@@ -51,6 +54,12 @@ const (
 	typeURL                  string = "type.googleapis.com/wso2.discovery.ga.Api"
 	grpcMaxConcurrentStreams        = 1000000
 	port                            = 18000
+	// ToDo: Modify the following to read from a param file
+	dbcHost							= "localhost"
+	dbcPort							= 5432
+	dbcUser							= "postgres"
+	dbcPassword						= "postgres"
+	dbName							= "apk_am_db"
 )
 
 // IDHash uses ID field as the node hash.
@@ -65,6 +74,7 @@ func (IDHash) ID(node *corev3.Node) string {
 }
 
 var _ wso2_cache.NodeHash = IDHash{}
+var db *sql.DB
 
 func init() {
 	apiCache = wso2_cache.NewSnapshotCache(false, IDHash{}, nil)
@@ -72,9 +82,9 @@ func init() {
 	introducedLabels = make(map[string]string, 1)
 }
 
-//FeedData mock data
+// FeedData mock data
 func FeedData() {
-	logger.LoggerXdsServer.Debug("adding mock data")
+	logger.LoggerXdsServer.Debug("Adding mock data")
 	version := rand.Intn(maxRandomInt)
 	applications := apkmgt_application.ApplicationDetails{
 		Applications: []*apkmgt_application.Application{
@@ -111,5 +121,28 @@ func InitAPKMgtServer() {
 	logger.LoggerServer.Info("APK Management server XDS is starting.")
 	if err = grpcServer.Serve(listener); err != nil {
 		logger.LoggerServer.Error("Error while starting APK Management server XDS.", err)
+	}
+}
+
+func InitDBConnection() {
+	// Connection string
+	psqlConnection := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", dbcHost, dbcPort, dbcUser, dbcPassword, dbName)
+	
+	// Open database connection
+	db, err := sql.Open("postgres", psqlConnection)
+	CheckError(err)
+	
+	defer db.Close()
+
+	// Check database connection
+	err = db.Ping()
+	CheckError(err)
+	
+	fmt.Println("Connected to PostgreSQL Database!")
+}
+ 
+func CheckError(err error) {
+	if err != nil {
+		panic(err)
 	}
 }

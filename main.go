@@ -12,6 +12,7 @@ func main() {
 	sig := make(chan os.Signal)
 	signal.Notify(sig, os.Interrupt)
 	go xds.InitAPKMgtServer()
+	go xds.InitDBConnection()
 	// todo(amaliMatharaarachchi) watch data updates and update snapshot accordingly.
 	go xds.FeedData()
 
